@@ -16,7 +16,11 @@ class Propagator:
         self.max_recur_limit = max_recur_limit
 
     def create_initial_state(
-        self, company_name: str, trade_date: str, past_context: str = ""
+        self,
+        company_name: str,
+        trade_date: str,
+        past_context: str = "",
+        user_thesis: str = "",
     ) -> Dict[str, Any]:
         """Create the initial state for the agent graph."""
         return {
@@ -24,6 +28,7 @@ class Propagator:
             "company_of_interest": company_name,
             "trade_date": str(trade_date),
             "past_context": past_context,
+            "user_thesis": user_thesis,
             "investment_debate_state": InvestDebateState(
                 {
                     "bull_history": "",
@@ -55,12 +60,7 @@ class Propagator:
         }
 
     def get_graph_args(self, callbacks: Optional[List] = None) -> Dict[str, Any]:
-        """Get arguments for the graph invocation.
-
-        Args:
-            callbacks: Optional list of callback handlers for tool execution tracking.
-                       Note: LLM callbacks are handled separately via LLM constructor.
-        """
+        """Get arguments for the graph invocation."""
         config = {"recursion_limit": self.max_recur_limit}
         if callbacks:
             config["callbacks"] = callbacks

@@ -12,23 +12,40 @@ def create_bull_researcher(llm):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
 
-        prompt = f"""You are a Bull Analyst advocating for investing in the stock. Your task is to build a strong, evidence-based case emphasizing growth potential, competitive advantages, and positive market indicators. Leverage the provided research and data to address concerns and counter bearish arguments effectively.
+        # NEW: external thesis the debate is stress-testing
+        user_thesis = state.get("user_thesis", "")
 
+        thesis_block = ""
+        if user_thesis:
+            thesis_block = f"""
+---
+**EXISTING THESIS UNDER REVIEW** (this is the position the debate is stress-testing):
+
+{user_thesis}
+
+Your job as the Bull is to STEELMAN the bullish elements of this thesis using the analyst reports below, and to surface the strongest bull arguments the existing thesis may be UNDERWEIGHTING. Do NOT generate macro narratives that are not supported by the analyst reports. Do NOT invent geopolitical events, price levels, or news items not in the source data. If the existing thesis is structurally bearish, articulate the strongest case for why a portion of capital should still be deployed long.
+---
+"""
+
+        prompt = f"""You are a Bull Analyst advocating for investing in this instrument. Your task is to build a strong, evidence-based case grounded STRICTLY in the analyst reports provided below. Do not introduce facts, dates, prices, or events that are not in the source data.
+
+{thesis_block}
 Key points to focus on:
-- Growth Potential: Highlight the company's market opportunities, revenue projections, and scalability.
-- Competitive Advantages: Emphasize factors like unique products, strong branding, or dominant market positioning.
-- Positive Indicators: Use financial health, industry trends, and recent positive news as evidence.
-- Bear Counterpoints: Critically analyze the bear argument with specific data and sound reasoning, addressing concerns thoroughly and showing why the bull perspective holds stronger merit.
-- Engagement: Present your argument in a conversational style, engaging directly with the bear analyst's points and debating effectively rather than just listing data.
+- Growth Potential: Highlight market opportunities, revenue projections, scalability — citing the analyst reports.
+- Competitive Advantages: Emphasize unique products, branding, market positioning that show up in the data.
+- Positive Indicators: Use financial health, industry trends, and recent news AS REPORTED in the source documents below.
+- Bear Counterpoints: Critically analyze the bear's argument with specific data from the reports — not invented examples.
+- Engagement: Conversational, direct, debate-style — but every claim must trace to a source report.
 
-Resources available:
+Resources available (these are your ONLY source of facts):
 Market research report: {market_research_report}
 Social media sentiment report: {sentiment_report}
 Latest world affairs news: {news_report}
 Company fundamentals report: {fundamentals_report}
 Conversation history of the debate: {history}
 Last bear argument: {current_response}
-Use this information to deliver a compelling bull argument, refute the bear's concerns, and engage in a dynamic debate that demonstrates the strengths of the bull position.
+
+Deliver a compelling bull argument that refutes the bear's concerns. Stay grounded in the reports. If the reports do not support a claim, do not make it.
 """
 
         response = llm.invoke(prompt)

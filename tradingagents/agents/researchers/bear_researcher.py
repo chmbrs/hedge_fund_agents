@@ -12,17 +12,33 @@ def create_bear_researcher(llm):
         news_report = state["news_report"]
         fundamentals_report = state["fundamentals_report"]
 
-        prompt = f"""You are a Bear Analyst making the case against investing in the stock. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
+        # NEW: external thesis the debate is stress-testing
+        user_thesis = state.get("user_thesis", "")
 
+        thesis_block = ""
+        if user_thesis:
+            thesis_block = f"""
+---
+**EXISTING THESIS UNDER REVIEW** (this is the position the debate is stress-testing):
+
+{user_thesis}
+
+Your job as the Bear is to RED-TEAM this thesis using the analyst reports below. Find the strongest case AGAINST the existing thesis. Surface risks the existing thesis is UNDERWEIGHTING. Identify the specific conditions that would invalidate it. Do NOT generate macro narratives that are not supported by the analyst reports. Do NOT invent geopolitical events, price levels, or news items not in the source data. If the existing thesis is structurally bullish, articulate the strongest reasons to trim or exit.
+---
+"""
+
+        prompt = f"""You are a Bear Analyst making the case against this investment. Build a well-reasoned argument grounded STRICTLY in the analyst reports below. Do not introduce facts, dates, prices, or events that are not in the source data.
+
+{thesis_block}
 Key points to focus on:
 
-- Risks and Challenges: Highlight factors like market saturation, financial instability, or macroeconomic threats that could hinder the stock's performance.
-- Competitive Weaknesses: Emphasize vulnerabilities such as weaker market positioning, declining innovation, or threats from competitors.
-- Negative Indicators: Use evidence from financial data, market trends, or recent adverse news to support your position.
-- Bull Counterpoints: Critically analyze the bull argument with specific data and sound reasoning, exposing weaknesses or over-optimistic assumptions.
-- Engagement: Present your argument in a conversational style, directly engaging with the bull analyst's points and debating effectively rather than simply listing facts.
+- Risks and Challenges: Market saturation, financial instability, macroeconomic threats — citing the analyst reports.
+- Competitive Weaknesses: Weaker positioning, declining innovation, competitive threats — as reported in the source data.
+- Negative Indicators: Financial data, market trends, adverse news AS REPORTED below.
+- Bull Counterpoints: Critically analyze the bull's claims with specific report data, exposing weaknesses or over-optimistic assumptions.
+- Engagement: Conversational, direct, debate-style — but every claim must trace to a source report.
 
-Resources available:
+Resources available (these are your ONLY source of facts):
 
 Market research report: {market_research_report}
 Social media sentiment report: {sentiment_report}
@@ -30,7 +46,8 @@ Latest world affairs news: {news_report}
 Company fundamentals report: {fundamentals_report}
 Conversation history of the debate: {history}
 Last bull argument: {current_response}
-Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the stock.
+
+Deliver a compelling bear argument that refutes the bull's claims. Stay grounded in the reports. If the reports do not support a claim, do not make it.
 """
 
         response = llm.invoke(prompt)

@@ -7,40 +7,40 @@ from langgraph.graph import MessagesState
 class InvestDebateState(TypedDict):
     bull_history: Annotated[
         str, "Bullish Conversation history"
-    ]  # Bullish Conversation history
+    ]
     bear_history: Annotated[
         str, "Bearish Conversation history"
-    ]  # Bullish Conversation history
-    history: Annotated[str, "Conversation history"]  # Conversation history
-    current_response: Annotated[str, "Latest response"]  # Last response
-    judge_decision: Annotated[str, "Final judge decision"]  # Last response
-    count: Annotated[int, "Length of the current conversation"]  # Conversation length
+    ]
+    history: Annotated[str, "Conversation history"]
+    current_response: Annotated[str, "Latest response"]
+    judge_decision: Annotated[str, "Final judge decision"]
+    count: Annotated[int, "Length of the current conversation"]
 
 
 # Risk management team state
 class RiskDebateState(TypedDict):
     aggressive_history: Annotated[
         str, "Aggressive Agent's Conversation history"
-    ]  # Conversation history
+    ]
     conservative_history: Annotated[
         str, "Conservative Agent's Conversation history"
-    ]  # Conversation history
+    ]
     neutral_history: Annotated[
         str, "Neutral Agent's Conversation history"
-    ]  # Conversation history
-    history: Annotated[str, "Conversation history"]  # Conversation history
+    ]
+    history: Annotated[str, "Conversation history"]
     latest_speaker: Annotated[str, "Analyst that spoke last"]
     current_aggressive_response: Annotated[
         str, "Latest response by the aggressive analyst"
-    ]  # Last response
+    ]
     current_conservative_response: Annotated[
         str, "Latest response by the conservative analyst"
-    ]  # Last response
+    ]
     current_neutral_response: Annotated[
         str, "Latest response by the neutral analyst"
-    ]  # Last response
+    ]
     judge_decision: Annotated[str, "Judge's decision"]
-    count: Annotated[int, "Length of the current conversation"]  # Conversation length
+    count: Annotated[int, "Length of the current conversation"]
 
 
 class AgentState(MessagesState):
@@ -71,3 +71,7 @@ class AgentState(MessagesState):
     ]
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
     past_context: Annotated[str, "Memory log context injected at run start (same-ticker decisions + cross-ticker lessons)"]
+    # NEW: external thesis injection — current position + conviction the debate should stress-test.
+    # When non-empty, bull/bear treat this as the position to attack (bear) or steelman (bull),
+    # rather than generating arguments from a blank slate.
+    user_thesis: Annotated[str, "External user thesis on this ticker; bull/bear stress-test it"]

@@ -39,10 +39,19 @@ def create_portfolio_manager(llm):
             else ""
         )
 
+        # NEW: external thesis the user holds — synthesise relative to this position,
+        # not in a vacuum.
+        user_thesis = state.get("user_thesis", "")
+        thesis_line = (
+            f"\n**EXISTING THESIS UNDER REVIEW** (the position being stress-tested):\n{user_thesis}\n"
+            if user_thesis
+            else ""
+        )
+
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 
 {instrument_context}
-
+{thesis_line}
 ---
 
 **Rating Scale** (use exactly one):
@@ -61,7 +70,7 @@ def create_portfolio_manager(llm):
 
 ---
 
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+Be decisive and ground every conclusion in specific evidence from the analysts. If an EXISTING THESIS was provided above, your decision should explicitly address whether the debate strengthens, weakens, or invalidates that thesis.{get_language_instruction()}"""
 
         final_trade_decision = invoke_structured_or_freetext(
             structured_llm,

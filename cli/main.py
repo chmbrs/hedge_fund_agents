@@ -33,6 +33,10 @@ from cli.stats_handler import StatsCallbackHandler
 
 console = Console()
 
+# Optional thesis shown in the UI and injected into the run.
+_THESIS_SOURCE: Optional[Path] = None
+_THESIS_TEXT: Optional[str] = None
+
 app = typer.Typer(
     name="TradingAgents",
     help="TradingAgents CLI: Multi-Agents LLM Financial Trading Framework",
@@ -238,7 +242,12 @@ def create_layout():
         Layout(name="footer", size=3),
     )
     layout["main"].split_column(
-        Layout(name="upper", ratio=3), Layout(name="analysis", ratio=5)
+        Layout(name="upper", ratio=3),
+        Layout(name="lower", ratio=5),
+    )
+    layout["lower"].split_row(
+        Layout(name="thesis", ratio=2),
+        Layout(name="analysis", ratio=3),
     )
     layout["upper"].split_row(
         Layout(name="progress", ratio=2), Layout(name="messages", ratio=3)
@@ -398,6 +407,27 @@ def update_display(layout, spinner_text=None, stats_handler=None, start_time=Non
         )
     )
 
+    # Thesis panel (if provided)
+    if _THESIS_TEXT and _THESIS_SOURCE:
+        thesis_md = f"**Source**: `{_THESIS_SOURCE}`\n\n{_THESIS_TEXT}"
+        layout["thesis"].update(
+            Panel(
+                Markdown(thesis_md),
+                title="Thesis (input)",
+                border_style="cyan",
+                padding=(1, 2),
+            )
+        )
+    else:
+        layout["thesis"].update(
+            Panel(
+                "[dim]No thesis loaded. Re-run with --thesis path/to/thesis.md[/dim]",
+                title="Thesis (input)",
+                border_style="grey50",
+                padding=(1, 2),
+            )
+        )
+
     # Analysis panel showing current report
     if message_buffer.current_report:
         layout["analysis"].update(
@@ -490,6 +520,13 @@ def get_user_selections():
     # Fetch and display announcements (silent on failure)
     announcements = fetch_announcements()
     display_announcements(console, announcements)
+
+    if _THESIS_SOURCE and _THESIS_TEXT:
+        char_count = len(_THESIS_TEXT)
+        console.print(
+            f"[green]✓ Thesis loaded: {_THESIS_SOURCE} ({char_count:,} chars)[/green]"
+        )
+        console.print()
 
     # Create a boxed questionnaire for each step
     def create_question_box(title, prompt, default=None):
@@ -636,10 +673,22 @@ def get_analysis_date():
             )
 
 
-def save_report_to_disk(final_state, ticker: str, save_path: Path):
+def save_report_to_disk(
+    final_state,
+    ticker: str,
+    save_path: Path,
+    thesis_text: Optional[str] = None,
+    thesis_source: Optional[Path] = None,
+):
     """Save complete analysis report to disk with organized subfolders."""
     save_path.mkdir(parents=True, exist_ok=True)
     sections = []
+
+    # Optional thesis
+    if thesis_text:
+        (save_path / "thesis.md").write_text(thesis_text, encoding="utf-8")
+        src = f"`{thesis_source}`" if thesis_source else "(unknown)"
+        sections.append(f"## 0. Thesis (input)\n\n**Source**: {src}\n\n{thesis_text}")
 
     # 1. Analysts
     analysts_dir = save_path / "1_analysts"
@@ -926,8 +975,41 @@ def format_tool_args(args, max_length=80) -> str:
         return result[:max_length - 3] + "..."
     return result
 
-def run_analysis(checkpoint: bool = False):
-    # First get all user selections
+def run_analysis(checkpoint: bool = False, thesis: Optional[Path] = None):
+    # Step 0: Resolve thesis before questionnaire (sets _THESIS_SOURCE/_THESIS_TEXT globals)
+    global _THESIS_SOURCE, _THESIS_TEXT
+    _THESIS_SOURCE = None
+    _THESIS_TEXT = None
+
+    theses_dir = Path(__file__).parent.parent / "theses"
+    theses_dir.mkdir(parents=True, exist_ok=True)
+
+    if thesis is not None:
+        thesis_path = Path(thesis)
+        if thesis_path.exists():
+            try:
+                _THESIS_TEXT = thesis_path.read_text(encoding="utf-8").strip()
+                _THESIS_SOURCE = thesis_path
+            except Exception as e:
+                console.print(f"[red]Failed to load thesis: {e}[/red]")
+        else:
+            # Path given but doesn't exist → wizard with stem as ticker hint
+            wizard_path = run_thesis_wizard(theses_dir, ticker_hint=thesis_path.stem)
+            try:
+                _THESIS_TEXT = wizard_path.read_text(encoding="utf-8").strip()
+                _THESIS_SOURCE = wizard_path
+            except Exception as e:
+                console.print(f"[red]Failed to load thesis after wizard: {e}[/red]")
+    else:
+        # No --thesis flag → interactive picker
+        chosen = select_thesis_interactive(theses_dir)
+        if chosen is not None:
+            try:
+                _THESIS_TEXT = chosen.read_text(encoding="utf-8").strip()
+                _THESIS_SOURCE = chosen
+            except Exception as e:
+                console.print(f"[red]Failed to load thesis: {e}[/red]")
+
     selections = get_user_selections()
 
     # Create config with selected research depth
@@ -962,6 +1044,24 @@ def run_analysis(checkpoint: bool = False):
 
     # Initialize message buffer with selected analysts
     message_buffer.init_for_analysis(selected_analyst_keys)
+
+    if _THESIS_TEXT:
+        original_create = graph.propagator.create_initial_state
+
+        def _create_with_thesis(company_name, trade_date, past_context=""):
+            try:
+                return original_create(
+                    company_name,
+                    trade_date,
+                    past_context=past_context,
+                    user_thesis=_THESIS_TEXT,
+                )
+            except TypeError:
+                state = original_create(company_name, trade_date, past_context=past_context)
+                state["user_thesis"] = _THESIS_TEXT
+                return state
+
+        graph.propagator.create_initial_state = _create_with_thesis
 
     # Track start time for elapsed display
     start_time = time.time()
@@ -1026,6 +1126,11 @@ def run_analysis(checkpoint: bool = False):
         message_buffer.add_message(
             "System", f"Analysis date: {selections['analysis_date']}"
         )
+        if _THESIS_TEXT and _THESIS_SOURCE:
+            message_buffer.add_message(
+                "System",
+                f"Thesis source: {_THESIS_SOURCE} ({len(_THESIS_TEXT)} chars)",
+            )
         message_buffer.add_message(
             "System",
             f"Selected analysts: {', '.join(analyst.value for analyst in selections['analysts'])}",
@@ -1185,7 +1290,13 @@ def run_analysis(checkpoint: bool = False):
         ).strip()
         save_path = Path(save_path_str)
         try:
-            report_file = save_report_to_disk(final_state, selections["ticker"], save_path)
+            report_file = save_report_to_disk(
+                final_state,
+                selections["ticker"],
+                save_path,
+                thesis_text=_THESIS_TEXT,
+                thesis_source=_THESIS_SOURCE,
+            )
             console.print(f"\n[green]✓ Report saved to:[/green] {save_path.resolve()}")
             console.print(f"  [dim]Complete report:[/dim] {report_file.name}")
         except Exception as e:
@@ -1199,6 +1310,11 @@ def run_analysis(checkpoint: bool = False):
 
 @app.command()
 def analyze(
+    thesis: Optional[Path] = typer.Option(
+        None,
+        "--thesis",
+        help="Path to a markdown thesis. If omitted, you'll be prompted to pick one or write a new one. If the path doesn't exist, the wizard will create it.",
+    ),
     checkpoint: bool = typer.Option(
         False,
         "--checkpoint",
@@ -1214,7 +1330,7 @@ def analyze(
         from tradingagents.graph.checkpointer import clear_all_checkpoints
         n = clear_all_checkpoints(DEFAULT_CONFIG["data_cache_dir"])
         console.print(f"[yellow]Cleared {n} checkpoint(s).[/yellow]")
-    run_analysis(checkpoint=checkpoint)
+    run_analysis(checkpoint=checkpoint, thesis=thesis)
 
 
 if __name__ == "__main__":
